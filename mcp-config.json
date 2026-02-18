@@ -1,0 +1,36 @@
+{
+  "mcpServers": {
+    "devops-agent": {
+      "command": "node",
+      "args": ["C:\\Users\\deskt\\Documents\\new-project\\mcp-server\\dist\\index.js"],
+      "env": {
+        "DEVOPS_AGENT_URL": "http://localhost",
+        "DEVOPS_AGENT_API_KEY": "",
+
+        "GITHUB_TOKEN": "ghp_YOUR_GITHUB_TOKEN_HERE",
+        "GITHUB_DEFAULT_REPO": "orton98/devops-deploy-agent",
+        "GITHUB_DEFAULT_BRANCH": "main",
+        "GITHUB_WORKFLOW_FILE": "deploy.yml",
+
+        "RAILWAY_TOKEN": "",
+        "RAILWAY_PROJECT_ID": "",
+        "RAILWAY_ENVIRONMENT": "production",
+
+        "CLOUDFLARE_TOKEN": "",
+        "CLOUDFLARE_ACCOUNT_ID": "",
+        "CLOUDFLARE_PROJECT_NAME": "",
+
+        "RENDER_API_KEY": "",
+        "RENDER_SERVICE_ID": "",
+
+        "DO_TOKEN": "",
+        "DO_APP_ID": "",
+
+        "AWS_ACCESS_KEY_ID": "",
+        "AWS_SECRET_ACCESS_KEY": "",
+        "AWS_REGION": "us-east-1",
+        "AWS_AMPLIFY_APP_ID": ""
+      }
+    }
+  }
+}
