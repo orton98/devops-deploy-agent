@@ -20,6 +20,10 @@ import {
   Upload,
   Zap,
   AlertCircle,
+  Wand2,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -67,6 +71,29 @@ const DEFAULT_SETTINGS: PlatformSettings = {
 
 type Platform = keyof PlatformSettings;
 type TestStatus = 'idle' | 'testing' | 'success' | 'failed';
+type SetupStatus = 'idle' | 'running' | 'success' | 'failed';
+
+interface SetupStep {
+  step: string;
+  status: 'ok' | 'error';
+  detail?: string;
+}
+
+interface SetupResult {
+  message: string;
+  repoUrl?: string;
+  pagesUrl?: string;
+  defaultRepo?: string;
+  projectId?: string;
+  projectUrl?: string;
+  serviceId?: string;
+  serviceUrl?: string;
+  dashboardUrl?: string;
+  appId?: string;
+  appUrl?: string;
+  consoleUrl?: string;
+  projectName?: string;
+}
 
 const PLATFORMS: { id: Platform; name: string; icon: React.ElementType; color: string; docsUrl: string }[] = [
   { id: 'github', name: 'GitHub', icon: Github, color: 'from-gray-600 to-gray-800', docsUrl: 'https://github.com/settings/tokens' },
@@ -217,6 +244,206 @@ function DigitalOceanForm({ s, set }: { s: PlatformSettings['digitalocean']; set
   );
 }
 
+// ─── Quick Setup Panel ────────────────────────────────────────────────────────
+function QuickSetupPanel({
+  platform,
+  settings,
+  onSuccess,
+}: {
+  platform: Platform;
+  settings: PlatformSettings;
+  onSuccess: (platform: Platform, result: SetupResult) => void;
+}) {
+  const [status, setStatus] = useState<SetupStatus>('idle');
+  const [steps, setSteps] = useState<SetupStep[]>([]);
+  const [result, setResult] = useState<SetupResult | null>(null);
+  const [error, setError] = useState('');
+  const [repoName, setRepoName] = useState('devops-deploy-agent');
+  const [expanded, setExpanded] = useState(false);
+
+  const SETUP_LABELS: Record<Platform, { label: string; desc: string }> = {
+    github: { label: 'Create Repo & Push Code', desc: 'Creates GitHub repo, pushes project files, enables Pages' },
+    railway: { label: 'Create Railway Project', desc: 'Creates project + service via Railway API' },
+    cloudflare: { label: 'Create Pages Project', desc: 'Creates Cloudflare Pages project with build config' },
+    render: { label: 'Create Render Service', desc: 'Creates a free web service on Render' },
+    digitalocean: { label: 'Create DO App', desc: 'Creates App Platform app on DigitalOcean' },
+    aws: { label: 'Create Amplify App', desc: 'Creates AWS Amplify app with build spec' },
+  };
+
+  const runSetup = async () => {
+    setStatus('running');
+    setSteps([]);
+    setResult(null);
+    setError('');
+
+    try {
+      const res = await fetch('/api/platform-setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform,
+          settings: settings[platform],
+          repoName,
+        }),
+      });
+      const data = await res.json();
+
+      if (data.steps) setSteps(data.steps);
+
+      if (data.success) {
+        setStatus('success');
+        setResult(data.result);
+        setExpanded(true);
+        onSuccess(platform, data.result);
+      } else {
+        setStatus('failed');
+        setError(data.error || 'Setup failed');
+      }
+    } catch (err) {
+      setStatus('failed');
+      setError(err instanceof Error ? err.message : 'Network error');
+    }
+  };
+
+  const info = SETUP_LABELS[platform];
+
+  return (
+    <div className="mt-6 border border-slate-700 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-900/80 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-500/20 rounded-lg">
+            <Wand2 className="w-4 h-4 text-purple-400" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-white">⚡ Quick Setup: {info.label}</p>
+            <p className="text-xs text-slate-500">{info.desc}</p>
+          </div>
+        </div>
+        {expanded ? <ChevronUp className="w-4 h-4 text-slate-500" /> : <ChevronDown className="w-4 h-4 text-slate-500" />}
+      </button>
+
+      {expanded && (
+        <div className="p-4 bg-slate-950/50 border-t border-slate-700/50">
+          {/* Repo name input */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1">
+              <label className="block text-xs text-slate-500 mb-1">Project / App Name</label>
+              <input
+                type="text"
+                value={repoName}
+                onChange={(e) => setRepoName(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-sm text-slate-200 focus:outline-none focus:border-purple-500"
+                placeholder="devops-deploy-agent"
+              />
+            </div>
+            <div className="pt-5">
+              <button
+                onClick={runSetup}
+                disabled={status === 'running'}
+                className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all ${
+                  status === 'running'
+                    ? 'bg-purple-600/50 text-purple-300 cursor-not-allowed'
+                    : status === 'success'
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                    : 'bg-purple-600 hover:bg-purple-500 text-white'
+                }`}
+              >
+                {status === 'running' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Setting up...</>
+                ) : status === 'success' ? (
+                  <><CheckCircle2 className="w-4 h-4" /> Done!</>
+                ) : (
+                  <><Wand2 className="w-4 h-4" /> Run Setup</>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Steps progress */}
+          {steps.length > 0 && (
+            <div className="space-y-1.5 mb-4">
+              {steps.map((s, i) => (
+                <div key={i} className={`flex items-start gap-2 text-xs px-3 py-1.5 rounded-lg ${
+                  s.status === 'ok' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'
+                }`}>
+                  {s.status === 'ok'
+                    ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    : <XCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                  <span>{s.step}{s.detail ? ` — ${s.detail}` : ''}</span>
+                </div>
+              ))}
+              {status === 'running' && (
+                <div className="flex items-center gap-2 text-xs px-3 py-1.5 text-blue-300">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Working...</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div className="flex items-start gap-2 text-xs px-3 py-2 bg-red-500/10 text-red-300 rounded-lg mb-3">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              {error}
+            </div>
+          )}
+
+          {/* Success result */}
+          {result && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-sm">
+              <p className="text-emerald-300 font-medium mb-2">{result.message}</p>
+              <div className="flex flex-wrap gap-2">
+                {(result.repoUrl || result.projectUrl || result.dashboardUrl || result.consoleUrl) && (
+                  <a
+                    href={result.repoUrl || result.projectUrl || result.dashboardUrl || result.consoleUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Open Dashboard
+                  </a>
+                )}
+                {(result.pagesUrl || result.serviceUrl || result.appUrl) && (
+                  <a
+                    href={result.pagesUrl || result.serviceUrl || result.appUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    View Live Site
+                  </a>
+                )}
+              </div>
+              {/* Show auto-filled IDs */}
+              {result.defaultRepo && (
+                <p className="text-xs text-slate-400 mt-2">✅ Default Repo auto-filled: <code className="text-slate-300">{result.defaultRepo}</code></p>
+              )}
+              {result.projectId && (
+                <p className="text-xs text-slate-400 mt-1">✅ Project ID auto-filled: <code className="text-slate-300">{result.projectId}</code></p>
+              )}
+              {result.serviceId && (
+                <p className="text-xs text-slate-400 mt-1">✅ Service ID auto-filled: <code className="text-slate-300">{result.serviceId}</code></p>
+              )}
+              {result.appId && (
+                <p className="text-xs text-slate-400 mt-1">✅ App ID auto-filled: <code className="text-slate-300">{result.appId}</code></p>
+              )}
+              {result.projectName && (
+                <p className="text-xs text-slate-400 mt-1">✅ Project Name auto-filled: <code className="text-slate-300">{result.projectName}</code></p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Settings Page ───────────────────────────────────────────────────────
 export default function SettingsPage() {
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS);
@@ -296,8 +523,35 @@ export default function SettingsPage() {
 
   const updatePlatform = <K extends Platform>(platform: K, value: PlatformSettings[K]) => {
     setSettings((prev) => ({ ...prev, [platform]: value }));
-    // Reset test status when settings change
     setTestStatus((p) => ({ ...p, [platform]: 'idle' }));
+  };
+
+  // Called when Quick Setup succeeds — auto-fill the relevant ID fields
+  const handleSetupSuccess = (platform: Platform, result: SetupResult) => {
+    setSettings((prev) => {
+      const updated = { ...prev };
+      if (platform === 'github' && result.defaultRepo) {
+        updated.github = { ...prev.github, defaultRepo: result.defaultRepo };
+      }
+      if (platform === 'railway' && result.projectId) {
+        updated.railway = { ...prev.railway, projectId: result.projectId };
+      }
+      if (platform === 'cloudflare' && result.projectName) {
+        updated.cloudflare = { ...prev.cloudflare, projectName: result.projectName };
+      }
+      if (platform === 'render' && result.serviceId) {
+        updated.render = { ...prev.render, serviceId: result.serviceId };
+      }
+      if (platform === 'digitalocean' && result.appId) {
+        updated.digitalocean = { ...prev.digitalocean, appId: result.appId };
+      }
+      if (platform === 'aws' && result.appId) {
+        updated.aws = { ...prev.aws, appId: result.appId };
+      }
+      // Auto-save
+      localStorage.setItem('devops-agent-settings', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const activePlatform = PLATFORMS.find((p) => p.id === activeTab)!;
@@ -492,6 +746,13 @@ export default function SettingsPage() {
             {activeTab === 'digitalocean' && (
               <DigitalOceanForm s={settings.digitalocean} set={(v) => updatePlatform('digitalocean', v)} />
             )}
+
+            {/* Quick Setup Panel — shown for all platforms */}
+            <QuickSetupPanel
+              platform={activeTab}
+              settings={settings}
+              onSuccess={handleSetupSuccess}
+            />
           </div>
         </div>
 
