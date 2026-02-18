@@ -1,0 +1,129 @@
+version: '3.9'
+
+# ============================================================
+# DevOps Deploy Agent — Production Docker Compose Stack
+# ============================================================
+# Services:
+#   - nextjs   : Next.js production app (port 3000)
+#   - n8n      : n8n workflow automation (port 5678)
+#   - nginx    : Reverse proxy (port 80)
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose logs -f        # Follow logs
+#   docker compose down           # Stop all services
+#   docker compose down -v        # Stop + remove volumes
+# ============================================================
+
+services:
+
+  # ── Next.js Production App ──────────────────────────────────
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: devops-agent-app
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_N8N_URL=http://localhost/n8n
+    expose:
+      - "3000"
+    networks:
+      - devops-net
+    depends_on:
+      n8n:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    labels:
+      - "com.devops-agent.service=frontend"
+
+  # ── n8n Workflow Automation ──────────────────────────────────
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: devops-agent-n8n
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost/n8n/
+      - N8N_PATH=/n8n/
+      - N8N_EDITOR_BASE_URL=http://localhost/n8n/
+      - EXECUTIONS_PROCESS=main
+      - N8N_METRICS=true
+      - N8N_LOG_LEVEL=info
+      - N8N_LOG_OUTPUT=console
+      - GENERIC_TIMEZONE=UTC
+      # Security
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD:-changeme123}
+      # Encryption key for credentials (CHANGE THIS!)
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-change-this-32-char-encryption-key}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    expose:
+      - "5678"
+    networks:
+      - devops-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    labels:
+      - "com.devops-agent.service=n8n"
+
+  # ── Nginx Reverse Proxy ──────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: devops-agent-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - devops-net
+    depends_on:
+      - nextjs
+      - n8n
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    labels:
+      - "com.devops-agent.service=nginx"
+
+# ── Volumes ──────────────────────────────────────────────────
+volumes:
+  n8n_data:
+    driver: local
+    name: devops-agent-n8n-data
+  nginx_logs:
+    driver: local
+    name: devops-agent-nginx-logs
+
+# ── Networks ─────────────────────────────────────────────────
+networks:
+  devops-net:
+    driver: bridge
+    name: devops-agent-network

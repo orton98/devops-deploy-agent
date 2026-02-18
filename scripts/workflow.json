@@ -1,0 +1,194 @@
+{
+  "name": "DevOps Deploy Agent",
+  "nodes": [
+    {
+      "id": "webhook-1",
+      "name": "Deploy Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 400],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deploy",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "validate-1",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400],
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json || {};\nconst required = ['platform', 'project'];\nconst missing = required.filter(k => !body[k]);\n\nif (missing.length > 0) {\n  return [{ json: { error: 'Missing: ' + missing.join(', '), status: 'validation_failed' }}];\n}\n\nconst platforms = ['github', 'aws', 'railway', 'cloudflare', 'render', 'digitalocean'];\nif (!platforms.includes(body.platform)) {\n  return [{ json: { error: 'Invalid platform: ' + body.platform, status: 'validation_failed' }}];\n}\n\nreturn [{ json: { ...body, status: 'validated', timestamp: new Date().toISOString() }}];"
+      }
+    },
+    {
+      "id": "switch-1",
+      "name": "Platform Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [600, 400],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.platform }}", "rightValue": "github", "operator": { "type": "string", "operation": "equals" }}], "combinator": "and" }, "outputKey": "0" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.platform }}", "rightValue": "aws", "operator": { "type": "string", "operation": "equals" }}], "combinator": "and" }, "outputKey": "1" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.platform }}", "rightValue": "railway", "operator": { "type": "string", "operation": "equals" }}], "combinator": "and" }, "outputKey": "2" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.platform }}", "rightValue": "cloudflare", "operator": { "type": "string", "operation": "equals" }}], "combinator": "and" }, "outputKey": "3" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.platform }}", "rightValue": "render", "operator": { "type": "string", "operation": "equals" }}], "combinator": "and" }, "outputKey": "4" },
+            { "conditions": { "conditions": [{ "leftValue": "={{ $json.platform }}", "rightValue": "digitalocean", "operator": { "type": "string", "operation": "equals" }}], "combinator": "and" }, "outputKey": "5" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "github-1",
+      "name": "GitHub Pages Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 100],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ `https://api.github.com/repos/${$json.repo}/pages/builds` }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.GITHUB_TOKEN }}" },
+            { "name": "Accept", "value": "application/vnd.github.v3+json" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "aws-1",
+      "name": "AWS Amplify Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 220],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ `https://amplify.us-east-1.amazonaws.com/apps/${$json.appId}/branches/${$json.branch || 'main'}/jobs` }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.AWS_ACCESS_KEY }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "railway-1",
+      "name": "Railway Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 340],
+      "parameters": {
+        "method": "POST",
+        "url": "https://backboard.railway.app/graphql",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.RAILWAY_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "body": "={{ JSON.stringify({ query: `mutation { deploymentCreate(input: { projectId: \"${$json.project}\", environmentId: \"${$json.env || 'production'}\" }) { id status } }` }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "cloudflare-1",
+      "name": "Cloudflare Pages Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 460],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ `https://api.cloudflare.com/client/v4/accounts/${$json.accountId || $env.CF_ACCOUNT_ID}/pages/projects/${$json.project}/deployments` }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.CLOUDFLARE_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "render-1",
+      "name": "Render Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 580],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ `https://api.render.com/v1/services/${$json.service}/deploys` }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.RENDER_TOKEN }}" },
+            { "name": "Accept", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "do-1",
+      "name": "DigitalOcean Deploy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [850, 700],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ `https://api.digitalocean.com/v2/apps/${$json.appId}/deployments` }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ 'Bearer ' + $env.DO_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "respond-1",
+      "name": "Respond to Client",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1100, 400],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, deploymentId: $json.id || ('dep-' + Date.now()), platform: $json.platform, project: $json.project, status: 'initiated', message: 'Deployment to ' + $json.platform + ' started successfully', timestamp: new Date().toISOString() }) }}",
+        "options": { "responseCode": 200 }
+      }
+    }
+  ],
+  "connections": {
+    "Deploy Webhook": { "main": [[{ "node": "Validate Request", "type": "main", "index": 0 }]] },
+    "Validate Request": { "main": [[{ "node": "Platform Router", "type": "main", "index": 0 }]] },
+    "Platform Router": { "main": [
+      [{ "node": "GitHub Pages Deploy", "type": "main", "index": 0 }],
+      [{ "node": "AWS Amplify Deploy", "type": "main", "index": 0 }],
+      [{ "node": "Railway Deploy", "type": "main", "index": 0 }],
+      [{ "node": "Cloudflare Pages Deploy", "type": "main", "index": 0 }],
+      [{ "node": "Render Deploy", "type": "main", "index": 0 }],
+      [{ "node": "DigitalOcean Deploy", "type": "main", "index": 0 }]
+    ]},
+    "GitHub Pages Deploy": { "main": [[{ "node": "Respond to Client", "type": "main", "index": 0 }]] },
+    "AWS Amplify Deploy": { "main": [[{ "node": "Respond to Client", "type": "main", "index": 0 }]] },
+    "Railway Deploy": { "main": [[{ "node": "Respond to Client", "type": "main", "index": 0 }]] },
+    "Cloudflare Pages Deploy": { "main": [[{ "node": "Respond to Client", "type": "main", "index": 0 }]] },
+    "Render Deploy": { "main": [[{ "node": "Respond to Client", "type": "main", "index": 0 }]] },
+    "DigitalOcean Deploy": { "main": [[{ "node": "Respond to Client", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

@@ -1,0 +1,104 @@
+name: Deploy DevOps Agent
+
+# ─── Triggers ─────────────────────────────────────────────────────────────────
+on:
+  # Manual trigger from the DevOps Deploy Agent UI
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: false
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - preview
+      triggered_by:
+        description: 'Who triggered this deployment'
+        required: false
+        default: 'manual'
+
+  # Auto-deploy on push to main
+  push:
+    branches:
+      - main
+      - master
+
+# ─── Permissions ──────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  deployments: write
+
+# ─── Concurrency ──────────────────────────────────────────────────────────────
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+# ─── Jobs ─────────────────────────────────────────────────────────────────────
+jobs:
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+
+    steps:
+      # ── Checkout ────────────────────────────────────────────────────────────
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Setup Node ──────────────────────────────────────────────────────────
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ── Install dependencies ─────────────────────────────────────────────
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # ── Build ────────────────────────────────────────────────────────────
+      - name: 🔨 Build Next.js app
+        run: npm run build
+        env:
+          NODE_ENV: production
+          NEXT_PUBLIC_N8N_URL: ${{ secrets.N8N_URL || 'http://localhost:5678' }}
+
+      # ── Export static (for GitHub Pages) ────────────────────────────────
+      - name: 📤 Export static files
+        run: |
+          if [ -d "out" ]; then
+            echo "Static export found in /out"
+          elif [ -d ".next" ]; then
+            echo "Next.js build found in /.next (standalone mode)"
+          fi
+
+      # ── Deploy to GitHub Pages ───────────────────────────────────────────
+      - name: 🚀 Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./out
+          publish_branch: gh-pages
+          commit_message: |
+            🚀 Deploy: ${{ github.event.inputs.environment || 'production' }}
+            Triggered by: ${{ github.event.inputs.triggered_by || github.actor }}
+            Commit: ${{ github.sha }}
+
+      # ── Deployment summary ───────────────────────────────────────────────
+      - name: 📊 Deployment Summary
+        run: |
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ github.event.inputs.environment || 'production' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | ${{ github.event.inputs.triggered_by || github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(date -u) |" >> $GITHUB_STEP_SUMMARY

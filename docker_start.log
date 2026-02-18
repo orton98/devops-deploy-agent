@@ -1,0 +1,40 @@
+============================================================
+  DevOps Deploy Agent — Docker Production Build
+============================================================
+
+⏳ Waiting for Docker daemon to be ready...
+✅ Docker is ready!
+
+
+[1/3] Building Docker images (may take 3-5 min)...
+
+  $ docker compose build --no-cache
+✅ Images built successfully!
+
+[2/3] Starting the stack...
+
+  $ docker compose up -d
+✅ Stack started!
+
+[3/3] Checking service status...
+
+  $ docker compose ps
+
+============================================================
+  🎉 Production Stack Running!
+============================================================
+
+  📱 App:      http://localhost
+  🔧 n8n UI:   http://localhost/n8n
+  🔗 Webhook:  http://localhost/webhook/deploy
+  📊 Health:   http://localhost/health
+
+  Next step — create the n8n workflow:
+    python scripts/create_n8n_workflow.py
+
+  Or run the full setup:
+    python scripts/setup_production.py
+
+  Logs:
+    docker compose logs -f
+

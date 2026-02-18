@@ -1,0 +1,31 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Next.js build output
+.next
+out
+
+# Environment files (injected at runtime)
+.env*.local
+.env.production
+
+# Development files
+*.bat
+run_*.js
+build_output.txt
+dev_output.txt
+
+# Version control
+.git
+.gitignore
+
+# Docker files (no need to copy into image)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Misc
+.DS_Store
+*.pem
+README.md
