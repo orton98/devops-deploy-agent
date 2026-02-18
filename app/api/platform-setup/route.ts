@@ -57,35 +57,69 @@ async function setupGitHub(
     const username = user.login;
     steps.push({ step: `Authenticated as @${username}`, status: 'ok' });
 
-    // Step 2: Create repo (ignore if already exists)
-    const createRes = await fetch('https://api.github.com/user/repos', {
-      method: 'POST',
+    // Step 2: Check if repo already exists first
+    const repoCheckRes = await fetch(`https://api.github.com/repos/${username}/${repoName}`, {
       headers: {
         Authorization: `Bearer ${s.token}`,
         Accept: 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
         'User-Agent': 'DevOps-Deploy-Agent/1.0',
       },
-      body: JSON.stringify({
-        name: repoName,
-        description: 'One-click multi-platform deployment agent powered by n8n and Next.js',
-        private: false,
-        auto_init: false,
-      }),
     });
 
     let repoUrl = `https://github.com/${username}/${repoName}`;
-    if (createRes.status === 422) {
-      // Repo already exists
-      steps.push({ step: `Repo "${repoName}" already exists`, status: 'ok', detail: repoUrl });
-    } else if (createRes.ok) {
-      const repo = await createRes.json();
-      repoUrl = repo.html_url;
-      steps.push({ step: `Created repo: ${repoUrl}`, status: 'ok' });
+
+    if (repoCheckRes.ok) {
+      // Repo already exists — skip creation
+      steps.push({ step: `Repo "${repoName}" already exists — skipping creation`, status: 'ok', detail: repoUrl });
     } else {
-      const err = await createRes.json().catch(() => ({}));
-      steps.push({ step: 'Create repo', status: 'error', detail: err.message || `HTTP ${createRes.status}` });
-      return NextResponse.json({ success: false, steps, error: err.message || 'Failed to create repo' });
+      // Try to create repo
+      const createRes = await fetch('https://api.github.com/user/repos', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${s.token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+          'User-Agent': 'DevOps-Deploy-Agent/1.0',
+        },
+        body: JSON.stringify({
+          name: repoName,
+          description: 'One-click multi-platform deployment agent powered by n8n and Next.js',
+          private: false,
+          auto_init: false,
+        }),
+      });
+
+      if (createRes.status === 422) {
+        steps.push({ step: `Repo "${repoName}" already exists`, status: 'ok', detail: repoUrl });
+      } else if (createRes.ok) {
+        const repo = await createRes.json();
+        repoUrl = repo.html_url;
+        steps.push({ step: `Created repo: ${repoUrl}`, status: 'ok' });
+      } else {
+        const err = await createRes.json().catch(() => ({}));
+        const errMsg = err.message || `HTTP ${createRes.status}`;
+
+        // Fine-grained PAT limitation — provide actionable guidance
+        if (errMsg.includes('not accessible') || createRes.status === 403) {
+          steps.push({
+            step: 'Repo creation requires classic PAT',
+            status: 'error',
+            detail: `Fine-grained PATs cannot create repos. Create the repo manually at github.com/new, then run setup again to push files.`,
+          });
+          return NextResponse.json({
+            success: false,
+            steps,
+            error: `Token cannot create repos. Please create "${repoName}" at github.com/new first, then run Quick Setup again to push all files.`,
+            hint: 'create_repo_manually',
+            createRepoUrl: `https://github.com/new?name=${repoName}&description=DevOps+Deploy+Agent`,
+            username,
+            repoName,
+          });
+        }
+
+        steps.push({ step: 'Create repo', status: 'error', detail: errMsg });
+        return NextResponse.json({ success: false, steps, error: errMsg });
+      }
     }
 
     // Step 3: Push key project files via GitHub Contents API
