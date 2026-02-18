@@ -40,6 +40,15 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Copy source files so /api/platform-setup can push them to GitHub
+COPY --from=builder --chown=nextjs:nodejs /app/app ./app
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.mjs ./next.config.mjs
+COPY --from=builder --chown=nextjs:nodejs /app/Dockerfile ./Dockerfile
+COPY --from=builder --chown=nextjs:nodejs /app/docker-compose.yml ./docker-compose.yml
+COPY --from=builder --chown=nextjs:nodejs /app/.github ./.github
+COPY --from=builder --chown=nextjs:nodejs /app/README.md ./README.md
+
 USER nextjs
 
 EXPOSE 3000
