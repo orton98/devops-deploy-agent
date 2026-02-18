@@ -95,6 +95,15 @@ interface SetupResult {
   projectName?: string;
 }
 
+interface SetupApiResponse {
+  success: boolean;
+  steps?: SetupStep[];
+  result?: SetupResult;
+  error?: string;
+  hint?: string;
+  createRepoUrl?: string;
+}
+
 const PLATFORMS: { id: Platform; name: string; icon: React.ElementType; color: string; docsUrl: string }[] = [
   { id: 'github', name: 'GitHub', icon: Github, color: 'from-gray-600 to-gray-800', docsUrl: 'https://github.com/settings/tokens' },
   { id: 'aws', name: 'AWS Amplify', icon: Cloud, color: 'from-orange-500 to-red-700', docsUrl: 'https://console.aws.amazon.com/iam' },
@@ -258,6 +267,7 @@ function QuickSetupPanel({
   const [steps, setSteps] = useState<SetupStep[]>([]);
   const [result, setResult] = useState<SetupResult | null>(null);
   const [error, setError] = useState('');
+  const [manualRepoUrl, setManualRepoUrl] = useState('');
   const [repoName, setRepoName] = useState('devops-deploy-agent');
   const [expanded, setExpanded] = useState(false);
 
@@ -286,15 +296,19 @@ function QuickSetupPanel({
           repoName,
         }),
       });
-      const data = await res.json();
+      const data: SetupApiResponse = await res.json();
 
       if (data.steps) setSteps(data.steps);
 
-      if (data.success) {
+      if (data.success && data.result) {
         setStatus('success');
         setResult(data.result);
         setExpanded(true);
         onSuccess(platform, data.result);
+      } else if (data.hint === 'create_repo_manually' && data.createRepoUrl) {
+        setStatus('failed');
+        setError(data.error || 'Setup failed');
+        setManualRepoUrl(data.createRepoUrl);
       } else {
         setStatus('failed');
         setError(data.error || 'Setup failed');
@@ -386,9 +400,25 @@ function QuickSetupPanel({
 
           {/* Error */}
           {error && (
-            <div className="flex items-start gap-2 text-xs px-3 py-2 bg-red-500/10 text-red-300 rounded-lg mb-3">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-              {error}
+            <div className="space-y-2 mb-3">
+              <div className="flex items-start gap-2 text-xs px-3 py-2 bg-red-500/10 text-red-300 rounded-lg">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                {error}
+              </div>
+              {manualRepoUrl && (
+                <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs">
+                  <span className="text-blue-300">👉 Create the repo first, then run Quick Setup again to push files:</span>
+                  <a
+                    href={manualRepoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-blue-400 hover:text-blue-300 underline font-medium whitespace-nowrap"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Create on GitHub →
+                  </a>
+                </div>
+              )}
             </div>
           )}
 
