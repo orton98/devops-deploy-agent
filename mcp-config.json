@@ -7,7 +7,7 @@
         "DEVOPS_AGENT_URL": "http://localhost",
         "DEVOPS_AGENT_API_KEY": "",
 
-        "GITHUB_TOKEN": "ghp_YOUR_GITHUB_TOKEN_HERE",
+        "GITHUB_TOKEN": "ghp_YOUR_GITHUB_TOKEN_HERE_GITHUB_TOKEN_HERE",
         "GITHUB_DEFAULT_REPO": "orton98/devops-deploy-agent",
         "GITHUB_DEFAULT_BRANCH": "main",
         "GITHUB_WORKFLOW_FILE": "deploy.yml",
