@@ -20,12 +20,9 @@ dev_output.txt
 .git
 .gitignore
 
-# Docker files (no need to copy into image)
-Dockerfile
-docker-compose.yml
+# Docker meta files (keep .dockerignore excluded, but allow others for source push)
 .dockerignore
 
 # Misc
 .DS_Store
 *.pem
-README.md
